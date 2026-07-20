@@ -1,135 +1,303 @@
-const splash = document.getElementById('splash-screen');
-const splashContent = document.getElementById('splash-content');
-let isSplashActive = true;
-let isExploding = false; 
-let isAssembling = true; // สถานะเริ่มแรก: สั่งให้เศษชิ้นส่วนวิ่งมารวมร่างกันก่อน
+<html>
+<head>
+    <title>Nut</title>  
+</head>
+<body>
+<canvas id="canvas" width="200" height="200"
+style="width:500px; height:500px; border:1px solid #000; image-rendering: pixelated;">
+</canvas>
+<button /button>
+<script>
 
-// Setup ฉากหลัง 3D
-const cyberCanvas = document.getElementById('splash-canvas');
-const scene = new THREE.Scene();
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const imageData = ctx.createImageData(canvas.width, canvas.height);
+const data = imageData.data; // Array of color [R,G,B,A, R,G,B,A, ...]
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.z = 13;
-
-const renderer = new THREE.WebGLRenderer({ canvas: cyberCanvas, alpha: true, antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-// โครงสร้างวัตถุ 1111 ชิ้น
-const COUNT = 1111; 
-const geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-const mat = new THREE.MeshNormalMaterial();
-const mesh = new THREE.InstancedMesh(geo, mat, COUNT); 
-scene.add(mesh);
-
-const boxData = [];
-const dummy = new THREE.Object3D(); 
-
-for(let i = 0; i < COUNT; i++){
-    //  1. คำนวณตำแหน่งเป้าหมายหลัก (จุดที่จะฟอร์มตัวโคจรรอบจุดศูนย์กลาง)
-    const targetX = (Math.random() - .5) * 20;
-    const targetY = (Math.random() - .5) * 20;
-    const targetZ = (Math.random() - .5) * 20;
-    const targetPosition = new THREE.Vector3(targetX, targetY, targetZ);
-
-    //  2. คำนวณตำแหน่งเกิด (ดีดให้เศษชิ้นส่วนกระจัดกระจายไปไกลๆ นอกจอในตอนแรก)
-    // คูณด้วย 30-50 เพื่อให้อยู่ลึกเข้าไปในอวกาศแล้วค่อยบินเข้ามา
-    const spawnPosition = targetPosition.clone().normalize().multiplyScalar(35 + Math.random() * 25);
-
-    //  3. เวกเตอร์ทิศทางสำหรับการระเบิดออกตอนโดนคลิก
-    const velocity = targetPosition.clone().normalize();
-    const speed = 0.25 + Math.random() * 0.35; 
-    velocity.multiplyScalar(speed);
-
-    boxData.push({
-        currentPosition: spawnPosition.clone(), // เริ่มต้นวัตถุที่พิกัดกระจายตัวรอบนอก
-        targetPosition: targetPosition,        // พิกัดที่จะเข้ามารวมร่าง
-        rotation: new THREE.Vector3(Math.random() * Math.PI, Math.random() * Math.PI, 0),
-        rotSpeed: new THREE.Vector3(
-            (Math.random() - 0.5) * 0.04,
-            (Math.random() - 0.5) * 0.04,
-            (Math.random() - 0.5) * 0.04
-        ),
-        velocity: velocity
-    });
-
-    dummy.position.copy(boxData[i].currentPosition);
-    dummy.rotation.set(boxData[i].rotation.x, boxData[i].rotation.y, boxData[i].rotation.z);
-    dummy.updateMatrix();
-    mesh.setMatrixAt(i, dummy.matrix);
+function putPixel(x, y, r, g, b, a=255) {
+    const index = (y * canvas.width + x) * 4;
+    data[index] = r;     // Red
+    data[index + 1] = g; // Green
+    data[index + 2] = b; // Blue
+    data[index + 3] = a; // Alpha
 }
 
-// ฟังก์ชันแอนิเมชันลูปหลัก
-function animateSplash(t){
-    if (!isSplashActive) return; 
-    
-    for(let i = 0; i < COUNT; i++) {
-        const data = boxData[i];
+function drawLine(x1, y1, x2, y2, r, g, b, a = 255) {
+  const dx = Math.abs(x2 - x1);
+  const dy = Math.abs(y2 - y1);
 
-        //  หมุนอิสระในตัวเองแต่ละกล่อง
-        data.rotation.x += data.rotSpeed.x;
-        data.rotation.y += data.rotSpeed.y;
-        data.rotation.z += data.rotSpeed.z;
+  if(dx > dy) {
+    const m = (y2 - y1) / (x2 - x1);
+    const c = y1 - m * x1;
+    for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) {
+      const y = Math.round(m * x + c);
+      putPixel(x, y, r, g, b, a);
+    }
+  } else {
+    const m = (x2 - x1) / (y2 - y1);
+    const c = x1 - m * y1;
+    for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {
+      const x = Math.round(m * y + c);
+      putPixel(x, y, r, g, b, a);
+    }
+  }
+}
 
-        if (isAssembling) {
-            //  [MODE: รวมร่าง] ค่อยๆ ดูดเศษชิ้นส่วนจากนอกจอกลับเข้ามาหาพิกัดเป้าหมายด้วยความนุ่มนวล (Lerp 4% ต่อเฟรม)
-            data.currentPosition.lerp(data.targetPosition, 0.04);
-        } else if (isExploding) {
-            //  [MODE: ระเบิด] สั่งให้พุ่งกระจายออกจากศูนย์กลางรอบทิศทาง
-            data.currentPosition.add(data.velocity);
+function drawRect(x1,y1,x2,y2,r,g,b,a = 255){
+    drawLine(x1,y1,x2,y1,r,g,b,a); // Top edge
+    drawLine(x2,y1,x2,y2,r,g,b,a); // Right edge
+    drawLine(x2,y2,x1,y2,r,g,b,a); // Bottom edge
+    drawLine(x1,y2,x1,y1,r,g,b,a); // Left edge
+}
+
+function drawRectFilled(x1,y1,x2,y2,r,g,b,a = 255){
+    for(let y = y1; y <= y2; y++){
+        for(let x = x1; x <= x2; x++){
+                putPixel(x,y,r,g,b,a);
         }
-
-        dummy.position.copy(data.currentPosition);
-        dummy.rotation.set(data.rotation.x, data.rotation.y, data.rotation.z);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
     }
-    
-    //  หมุนกลุ่มก้อนวัตถุทั้งหมดตามแนววงโคจรหลัก
-    mesh.rotation.y = t * 0.0003; 
-    mesh.instanceMatrix.needsUpdate = true;
-    
-    renderer.render(scene, camera);
-    requestAnimationFrame(animateSplash);
 }
-requestAnimationFrame(animateSplash);
 
-// เมื่อคลิกหน้าจอ: สลายตัวหนังสือ และระเบิดกล่องออกไป
-splash.addEventListener('click', () => {
-    if (isExploding) return; 
-    
-    isAssembling = false; //  สั่งปิดโหมดรวมร่างทันทีเพื่อให้วัตถุหลุดจากแรงดึงดูดเดิม
-    isExploding = true;   //  เปิดโหมดระเบิดพุ่งกระจาย
-    
-    splashContent.classList.add('blur-fade-out'); // สั่งให้ข้อความสลายตัวแบบดิจิทัล
-
-    // ทิ้งช่วงเวลาให้เห็นเอฟเฟกต์การระเบิดและการจางหายอย่างสมูท 1.4 วินาที
-    setTimeout(() => {
-        splash.classList.add('fade-out');
-        setTimeout(() => {
-            isSplashActive = false; 
-        }, 1500);
-    }, 1400);
-});
-
-// Responsive จอคอมพิวเตอร์
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
- document.addEventListener("DOMContentLoaded", () => {
-    const heroTitle = document.getElementById('hero-title');
-    if (heroTitle) {
-        const text = heroTitle.textContent; // ดึงคำว่า "Hi, I'm Kittapol"
-        heroTitle.innerHTML = text.split('').map((char, index) => {
-            if (char === ' ') return '<span>&nbsp;</span>';
-            
-            const isName = index >= 8; 
-            const colorClass = isName ? 'color-name' : 'color-white';
-            
-            return `<span class="${colorClass}">${char}</span>`;
-        }).join('');
+function drawRectGradient(x1,y1,x2,y2, r1,g1,b1, r2,g2,b2, a = 255){
+    for(let y = y1; y <= y2; y++){
+        let t = (y - y1) / (y2 - y1);
+        let r = Math.round(r1 * (1 - t) + r2 * t);
+        let g = Math.round(g1 * (1 - t) + g2 * t);
+        let b = Math.round(b1 * (1 - t) + b2 * t);
+        for(let x = x1; x <= x2; x++){
+            putPixel(x,y,r,g,b,a);
+        }
     }
+}
+
+function drawEllipse(cx, cy, rx, ry, r, g, b, a = 255) {
+    for (let y = -ry; y <= ry; y++) {
+        for (let x = -rx; x <= rx; x++) {
+            if ((x * x) / (rx * rx) + (y * y) / (ry * ry) < 1) {
+                putPixel(cx + x, cy + y, r, g, b, a);
+            }
+        }
+    }
+}
+
+const spaceInvaderSprite = [
+            [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
+            [0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1],
+            [0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1],
+            [0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+            [0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1],
+            [0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1],
+            [0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1],
+            [0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 0],
+            [1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+            [0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0],
+        ];
+
+const smileySprite = 
+   [
+    [0, 0, 1, 1, 1, 1, 0, 0],
+    [0, 1, 0, 0, 0, 0, 1, 0],
+    [1, 0, 1, 0, 0, 1, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 1, 0, 0, 1, 0, 1],
+    [1, 0, 0, 1, 1, 0, 0, 1],
+    [0, 1, 0, 0, 0, 0, 1, 0],
+    [0, 0, 1, 1, 1, 1, 0, 0],
+];
+
+let isDragging = false;
+let prevMouseX = 0;
+let prevMouseY = 0;
+let r = 0;
+let g = 0;
+let b = 0;
+let degree = 0;
+let scaleX = 1;
+let scaleY = 1;
+let MouseX = 1;
+let MouseY = 1;
+
+function drawSprite(sprite, x, y, r, g, b, a = 255) {
+    for (let j = 0; j < sprite.length; j++) {
+        for (let i = 0; i < sprite[j].length; i++) {
+            if (sprite[j][i] === 1) {
+                putPixel(x + i, y + j, r, g, b, a);
+            }
+        }
+    }
+}
+function drawSpriteRotateScale(sprite, x, y, degree, scaleX, scaleY, r, g, b, a = 255) {
+  for (let j = 0; j < sprite.length; j++) {
+    for (let i = 0; i < sprite[j].length; i++) {
+      if (sprite[j][i] === 1) {
+        const cX = i - sprite[j].length / 2;
+        const cY = j - sprite.length / 2;
+
+        //Rotate
+        const rad = degree * (Math.PI / 100);
+        const x_rot = Math.round(cX * Math.cos(rad) - cY * Math.sin(rad));
+        const y_rot = Math.round(cX * Math.sin(rad) + cY * Math.cos(rad));
+        //Scale
+        const x_scaled = Math.round(x_rot * scaleX);
+        const y_scaled = Math.round(y_rot * scaleY);
+        //Translate
+        const x_translated = x_scaled + x;
+        const y_translated = y_scaled + y;
+        
+        //drawRectFilled(x_scaled + x, y_scaled + y, scaleX, scaleY, r, g, b, a)
+        //drawRect(x_scaled + x, y_scaled + y, scaleX, scaleY, r, g, b, a)
+        drawEllipse(x_scaled + x, y_scaled + y, scaleX, scaleY, r, g, b, a)
+        //putPixel(x_scaled + x, y_scaled + y, r, g, b, a);
+      }
+    }
+  }
+}
+
+
+function toScaledMousePos(posX, posY) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: Math.floor((posX - rect.left) * scaleX),
+    y: Math.floor((posY - rect.top) * scaleY)
+  };
+}
+
+function toScaledMouseCoords(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+        x: Math.floor((clientX - rect.left) * scaleX),
+        y: Math.floor((clientY - rect.top) * scaleY)
+    };
+}
+
+
+canvas.addEventListener('click', function(event) {
+    const { x, y } = toScaledMouseCoords(event.clientX, event.clientY);
+
+    console.log('clicked', x, y);
+//    putPixel(x, y, 255, 0, 0); // Draw a red pixel on click
+    ctx.putImageData(imageData, 0, 0);
 });
+
+canvas.addEventListener('mousedown', function(event){
+    const { x, y } = toScaledMouseCoords(event.clientX, event.clientY);
+        isDragging = true
+    console.log('mousedown', x, y);
+        putPixel(x, y, 0, 255, 0); // Draw a red pixel on click
+    ctx.putImageData(imageData, 0, 0);
+});
+
+canvas.addEventListener('mouseup', function(event){
+    const { x, y } = toScaledMouseCoords(event.clientX, event.clientY);
+
+    console.log('mouseup', x, y);
+    isDragging = false
+    putPixel(x, y, 0, 0, 255); // Draw a red pixel on click
+    ctx.putImageData(imageData, 0, 0); 
+
+});
+
+canvas.addEventListener('mousemove', function(event)  {
+    const { x, y } = toScaledMouseCoords(event.clientX, event.clientY);
+    MouseX = x;
+    MouseY = y;
+
+    if(isDragging){
+            drawLine(prevMouseX, prevMouseY, x,y,r, g, b);
+    ctx.putImageData(imageData, 0, 0); 
+}
+    prevMouseX = x;
+    prevMouseY = y;
+
+
+});
+
+        window.addEventListener('keydown', function(event){
+            console.log('keydown', event.key);
+            
+            
+            if (event.key === '1'){
+                r=255; g = 0; b = 0;
+            }
+            if (event.key === '2'){
+                r=0; g = 255; b = 0;
+            }
+            if (event.key === '3'){
+                r=0; g = 0; b = 255;
+            }
+            if (event.key === 'e'){
+                r=255; g = 255; b = 255;
+            }
+            if (event.key === 'ArrowLeft'){
+                degree--;
+            }
+            if (event.key === 'ArrowRight'){
+                degree++;
+            }
+            if (event.key === 'ArrowUp'){
+                scaleY++;
+                scaleX++;
+            }
+            if(event.key === 'ArrowDown'){
+                scaleX--;
+                scaleY--;
+            }
+        
+        });
+        window.addEventListener('keyup', function(event){
+            console.log('keyup', event.key);
+        });
+
+
+/*drawLine(10,10,40,150,255,0,0); // Draw a red line
+drawRect(50,50,150,150,0,255,0); // Draw a yellow rectangle
+drawRectFilled(60,60,140,140,0,0,255); // Draw a filled blue rectangle
+drawRectGradient(70,70, 130,130, 255,0,0, 0,0,255); // Draw a gradient rectangle from red to blue
+drawEllipse(100, 100, 30, 20, 255, 255, 0); // Draw a yellow ellipse
+drawSprite(spaceInvaderSprite, 120, 120, 255, 0, 255); // Draw a magenta space invader sprite
+drawSprite(smileySprite, 80, 120, 255, 255, 0); // Draw a yellow smiley sprite
+
+for(let i=0;i<5;i++){
+    for(let j=0;j<3;j++){
+        drawSprite(spaceInvaderSprite, 10 + i*20, 10 + j*20, 0, 255, 128); // Draw cyan space invaders in a grid
+    }
+}
+
+for(let i=0;i<3;i++){
+    for(let j=0;j<3;j++){
+        drawSprite(smileySprite, 110 + i*20, 10 + j*20, 255, 128, 128); 
+    }
+}
+*/
+
+//drawSprite(spaceInvaderSprite, 100, 100, 250, 0, 250);
+
+
+ctx.putImageData(imageData, 0, 0);
+
+function animate() {
+
+        drawRectFilled(0, 0, canvas.width, canvas.height, 255, 255, 255); 
+        drawLine(100,100,canvas.width-1,100,0,0,0);
+        drawLine(100,100,100,0,0,0,0);
+        //degree += 0.5; // Increase rotation degree
+        drawSpriteRotateScale(spaceInvaderSprite, MouseX, MouseY, degree, scaleX, scaleY, r, g, b); // Draw a green space invader at (10,10)
+            
+        ctx.putImageData(imageData, 0, 0);
+  requestAnimationFrame(animate);
+}
+animate();
+
+</script>
+
+</body>
+</html>
