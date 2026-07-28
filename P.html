@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Paint - Raster Graphics</title>  
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .toolbar { margin-bottom: 10px; display: flex; gap: 10px; align-items: center; }
+        button { padding: 5px 10px; cursor: pointer; }
+        button.active { background-color: #d0e0ff; font-weight: bold; border: 2px solid #0055ff; }
+        canvas { cursor: crosshair; }
+    </style>
+</head>
+<body>
+
+<h2>My Paint </h2>
+<div class="toolbar">
+    <!-- เครื่องมือวาด -->
+    <button id="btn-pencil" class="active" onclick="setTool('pencil')">✏️ ดินสอ</button>
+    <button id="btn-line" onclick="setTool('line')"> — เส้นตรง</button>
+    <button id="btn-rect" onclick="setTool('rect')">▭ สี่เหลี่ยม</button>
+    <button id="btn-ellipse" onclick="setTool('ellipse')">○ วงรี</button>
+    <button id="btn-eraser" onclick="setTool('eraser')">◻️ ยางลบ</button>
+    
+    <!-- เลือกสี และ ความหนา -->
+    <label>สี: <input type="color" id="colorPicker" onchange="updateColor(this.value)" value="#000000"></label>
+    <label>ความหนา: <input type="range" min="1" max="20" value="1" onchange="updateSize(this.value)"></label>
+</div>
+
+<canvas id="canvas" width="1800" height="800"
+style="border:1px solid #000; image-rendering: pixelated;">
+</canvas>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const imageData = ctx.createImageData(canvas.width, canvas.height);
+const data = imageData.data; 
+
+// กำหนดพื้นหลังให้เป็นสีขาว (เพื่อเวลาใช้ยางลบจะได้ลบเป็นสีขาว)
+for (let i = 0; i < data.length; i += 4) {
+    data[i] = 255;     // R
+    data[i + 1] = 255; // G
+    data[i + 2] = 255; // B
+    data[i + 3] = 255; // A
+}
+ctx.putImageData(imageData, 0, 0);
+
+// ==========================================
+// สถานะของโปรแกรม Paint
+// ==========================================
+let currentTool = 'pencil';
+let isDragging = false;
+let startX = 0;
+let startY = 0;
+let previousMouseX = 0;
+let previousMouseY = 0;
+let r = 0, g = 0, b = 0; // สีเริ่มต้น (ดำ)
+let lineSize = 1; // ความหนาเริ่มต้น
+let savedData = null; // ไว้เก็บภาพก่อนวาด (สำหรับ Preview ตอนลากเมาส์)
+
+function setTool(tool) {
+    currentTool = tool;
+    // อัปเดต UI ปุ่ม
+    document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('btn-' + tool).classList.add('active');
+}
+
+function updateColor(hex) {
+    let bigint = parseInt(hex.slice(1), 16);
+    r = (bigint >> 16) & 255;
+    g = (bigint >> 8) & 255;
+    b = bigint & 255;
+}
+
+function updateSize(size) {
+    lineSize = parseInt(size);
+}
+
+// ==========================================
+// ฟังก์ชันวาดรูปภาพแบบ Raster (มีการเพิ่ม parameter size)
+// ==========================================
+function putPixel(x, y, r, g, b, a=255, size=1) {
+    let offset = Math.floor(size / 2);
+    // สร้าง block สี่เหลี่ยมตามความหนา (size)
+    for(let dy = -offset; dy < size - offset; dy++) {
+        for(let dx = -offset; dx < size - offset; dx++) {
+            let px = x + dx;
+            let py = y + dy;
+            if(px >= 0 && px < canvas.width && py >= 0 && py < canvas.height) {
+                const index = (py * canvas.width + px) * 4;
+                data[index] = r;     
+                data[index + 1] = g; 
+                data[index + 2] = b; 
+                data[index + 3] = a; 
+            }
+        }
+    }
+}
+
+function drawLine(x1, y1, x2, y2, r, g, b, a = 255, size=1) {
+  const dx = Math.abs(x2 - x1);
+  const dy = Math.abs(y2 - y1);
+
+  if(dx > dy) {
+    const m = (y2 - y1) / (x2 - x1);
+    const c = y1 - m * x1;
+    for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) {
+      const y = Math.round(m * x + c);
+      putPixel(x, y, r, g, b, a, size);
+    }
+  } else {
+    // ป้องกันการหารด้วยศูนย์
+    if (y1 === y2) return; 
+    const m = (x2 - x1) / (y2 - y1);
+    const c = x1 - m * y1;
+    for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {
+      const x = Math.round(m * y + c);
+      putPixel(x, y, r, g, b, a, size);
+    }
+  }
+}
+
+function drawRect(x1, y1, x2, y2, r, g, b, a = 255, size=1){
+    drawLine(x1,y1,x2,y1,r,g,b,a,size); // Top edge
+    drawLine(x2,y1,x2,y2,r,g,b,a,size); // Right edge
+    drawLine(x2,y2,x1,y2,r,g,b,a,size); // Bottom edge
+    drawLine(x1,y2,x1,y1,r,g,b,a,size); // Left edge
+}
+
+function drawEllipseOutline(cx, cy, rx, ry, r, g, b, a = 255, size=1) {
+    // ใช้วิธีคำนวณตามเส้นรอบวงอย่างง่ายเพื่อให้เส้นต่อกันสนิท (ทดแทน Bresenham)
+    let perimeter = Math.PI * 2 * Math.max(rx, ry);
+    for (let i = 0; i <= perimeter; i++) {
+        let rad = (i / perimeter) * Math.PI * 2;
+        let x = Math.round(cx + rx * Math.cos(rad));
+        let y = Math.round(cy + ry * Math.sin(rad));
+        putPixel(x, y, r, g, b, a, size);
+    }
+}
+
+// ==========================================
+// การควบคุมเมาส์
+// ==========================================
+function toScaledMouseCoords(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+        x: Math.floor((clientX - rect.left) * scaleX),
+        y: Math.floor((clientY - rect.top) * scaleY)
+    };
+}
+
+// ฟังก์ชันคัดลอก ImageData ไว้ทำ Preview
+function copyCurrentCanvas() {
+    return new ImageData(new Uint8ClampedArray(imageData.data), canvas.width, canvas.height);
+}
+
+canvas.addEventListener('mousedown', function(event){
+    const { x, y } = toScaledMouseCoords(event.clientX, event.clientY);
+    isDragging = true;
+    startX = x;
+    startY = y;
+    previousMouseX = x;
+    previousMouseY = y;
+    
+    // เก็บภาพบนแคนวาสก่อนเริ่มวาดรูปร่าง เพื่อทำ Live Preview
+    savedData = copyCurrentCanvas(); 
+
+    if (currentTool === 'pencil' || currentTool === 'eraser') {
+        let drawR = currentTool === 'eraser' ? 255 : r;
+        let drawG = currentTool === 'eraser' ? 255 : g;
+        let drawB = currentTool === 'eraser' ? 255 : b;
+        putPixel(x, y, drawR, drawG, drawB, 255, lineSize);
+        ctx.putImageData(imageData, 0, 0);
+    }
+});
+
+canvas.addEventListener('mousemove', function(event){
+    const { x, y } = toScaledMouseCoords(event.clientX, event.clientY);
+    
+    if(isDragging){
+        if (currentTool === 'pencil' || currentTool === 'eraser') {
+            let drawR = currentTool === 'eraser' ? 255 : r;
+            let drawG = currentTool === 'eraser' ? 255 : g;
+            let drawB = currentTool === 'eraser' ? 255 : b;
+            // ลากเส้นต่อเนื่อง
+            drawLine(previousMouseX, previousMouseY, x, y, drawR, drawG, drawB, 255, lineSize);
+            ctx.putImageData(imageData, 0, 0);
+            previousMouseX = x;
+            previousMouseY = y;
+        } else {
+            // โหมดรูปร่างทรงเลขาคณิต: ต้องรีเซ็ตภาพเป็นสถานะก่อนลากเมาส์ (Preview)
+            imageData.data.set(savedData.data);
+            
+            if (currentTool === 'line') {
+                drawLine(startX, startY, x, y, r, g, b, 255, lineSize);
+            } else if (currentTool === 'rect') {
+                drawRect(startX, startY, x, y, r, g, b, 255, lineSize);
+            } else if (currentTool === 'ellipse') {
+                let rx = Math.abs(x - startX);
+                let ry = Math.abs(y - startY);
+                drawEllipseOutline(startX, startY, rx, ry, r, g, b, 255, lineSize);
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+    }
+});
+
+canvas.addEventListener('mouseup', function(event){
+    isDragging = false;
+});
+
+</script>
+
+</body>
+</html>
