@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Next Gen Rendering - Assignment #3</title>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
+
+    <script>
+
+        // =====================================================
+        // RENDERER
+        // =====================================================
+
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true
+        });
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        document.body.appendChild(renderer.domElement);
+
+
+        // =====================================================
+        // SCENE
+        // =====================================================
+
+        const scene = new THREE.Scene();
+
+
+        // =====================================================
+        // CAMERA
+        // =====================================================
+
+        const camera = new THREE.PerspectiveCamera(
+            75,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+
+        camera.position.set(0, 2, 5);
+        camera.lookAt(0, 0, 0);
+
+
+        // =====================================================
+        // ORBIT CONTROLS
+        // =====================================================
+
+        const controls = new THREE.OrbitControls(
+            camera,
+            renderer.domElement
+        );
+
+
+        // =====================================================
+        // DIRECTIONAL LIGHT
+        // =====================================================
+
+        const directionalLight = new THREE.DirectionalLight(
+            0xffffff,
+            0.5
+        );
+
+        directionalLight.position.set(10, 10, 10);
+
+        directionalLight.castShadow = true;
+
+        scene.add(directionalLight);
+
+
+        // =====================================================
+        // ENVIRONMENT
+        // =====================================================
+
+        const hdrUrl =
+    'https://6721601141nutthapong.github.io/Nutthapong.github.io/3D/kloppenheim__1k.hdr';
+
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+
+new THREE.RGBELoader()
+    .setDataType(THREE.UnsignedByteType)
+    .load(
+        hdrUrl,
+        (texture) => {
+
+            texture.mapping = THREE.EquirectangularReflectionMapping;
+
+            scene.background = texture;
+            scene.environment =
+                pmremGenerator.fromEquirectangular(texture).texture;
+
+            texture.dispose();
+            pmremGenerator.dispose();
+
+            console.log("HDR Environment Loaded");
+
+        },
+        undefined,
+        (error) => {
+
+            console.error("HDR Load Error:", error);
+
+        }
+    );
+
+
+        // =====================================================
+        // FLOOR - PBR MATERIAL
+        // =====================================================
+
+        const texFloor =
+            new THREE.TextureLoader().load(
+                'https://6721601141nutthapong.github.io/Nutthapong.github.io/3D/dark_rock_diff_1k.jpg'
+            );
+
+
+        const matFloor =
+            new THREE.MeshStandardMaterial({
+
+                // Base Color / Texture
+                map: texFloor,
+
+                // PBR
+                metalness: 0.0,
+                roughness: 0.8,
+
+                side: THREE.DoubleSide
+            });
+
+
+        const planeGeometry =
+            new THREE.PlaneGeometry(10, 10);
+
+
+        const plane =
+            new THREE.Mesh(
+                planeGeometry,
+                matFloor
+            );
+
+
+        plane.rotation.x = -Math.PI / 2;
+
+        plane.receiveShadow = true;
+
+        scene.add(plane);
+
+
+        // =====================================================
+        // LOAD CHARACTER
+        // =====================================================
+
+        const loader = new THREE.GLTFLoader();
+
+        let model = null;
+
+
+        loader.load(
+
+            'https://6721601141nutthapong.github.io/Nutthapong.github.io/3D/rigged_model.glb',
+
+            (gltf) => {
+
+                model = gltf.scene;
+
+
+                model.traverse((child) => {
+
+                    if (child.isMesh) {
+
+                        // Shadow
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+
+
+                        // =================================================
+                        // PBR MATERIAL
+                        // =================================================
+
+                        if (child.material) {
+
+                            // Make sure material uses PBR
+                            child.material.metalness = 0.0;
+                            child.material.roughness = 0.5;
+
+                            child.material.needsUpdate = true;
+                        }
+                    }
+
+                });
+
+
+                model.position.set(0, 0, 0);
+
+                scene.add(model);
+
+            },
+
+            undefined,
+
+            (error) => {
+
+                console.error(
+                    'Unable to load character:',
+                    error
+                );
+
+            }
+
+        );
+
+
+        // =====================================================
+        // GUI
+        // =====================================================
+
+        const gui =
+            new dat.GUI({
+                width: 300
+            });
+
+
+        // =====================================================
+        // DIRECTIONAL LIGHT GUI
+        // =====================================================
+
+        const dirLightFolder =
+            gui.addFolder('Directional Light');
+
+
+        dirLightFolder
+            .add(
+                directionalLight.position,
+                'x',
+                -20,
+                20,
+                0.1
+            )
+            .name('Position X');
+
+
+        dirLightFolder
+            .add(
+                directionalLight.position,
+                'y',
+                0,
+                20,
+                0.1
+            )
+            .name('Position Y');
+
+
+        dirLightFolder
+            .add(
+                directionalLight.position,
+                'z',
+                -20,
+                20,
+                0.1
+            )
+            .name('Position Z');
+
+
+        dirLightFolder
+            .add(
+                directionalLight,
+                'intensity',
+                0,
+                5,
+                0.1
+            )
+            .name('Intensity');
+
+
+        const lightColor =
+            {
+                color: '#ffffff'
+            };
+
+
+        dirLightFolder
+            .addColor(
+                lightColor,
+                'color'
+            )
+            .name('Color')
+            .onChange((val) => {
+
+                directionalLight.color.set(val);
+
+            });
+
+
+        dirLightFolder.open();
+
+
+        // =====================================================
+        // CHARACTER PBR GUI
+        // =====================================================
+
+        const pbrSettings = {
+
+            baseColor: '#ffffff',
+
+            metallic: 0.0,
+
+            roughness: 0.5
+        };
+
+
+        const pbrFolder =
+            gui.addFolder('Character PBR');
+
+
+        // Base Color
+        pbrFolder
+            .addColor(
+                pbrSettings,
+                'baseColor'
+            )
+            .name('Base Color')
+            .onChange((value) => {
+
+                if (!model) return;
+
+
+                model.traverse((child) => {
+
+                    if (
+                        child.isMesh &&
+                        child.material
+                    ) {
+
+                        child.material.color.set(value);
+
+                        child.material.needsUpdate = true;
+                    }
+
+                });
+
+            });
+
+
+        // Metallic
+        pbrFolder
+            .add(
+                pbrSettings,
+                'metallic',
+                0,
+                1,
+                0.01
+            )
+            .name('Metallic')
+            .onChange((value) => {
+
+                if (!model) return;
+
+
+                model.traverse((child) => {
+
+                    if (
+                        child.isMesh &&
+                        child.material
+                    ) {
+
+                        child.material.metalness = value;
+
+                    }
+
+                });
+
+            });
+
+
+        // Roughness
+        pbrFolder
+            .add(
+                pbrSettings,
+                'roughness',
+                0,
+                1,
+                0.01
+            )
+            .name('Roughness')
+            .onChange((value) => {
+
+                if (!model) return;
+
+
+                model.traverse((child) => {
+
+                    if (
+                        child.isMesh &&
+                        child.material
+                    ) {
+
+                        child.material.roughness = value;
+
+                    }
+
+                });
+
+            });
+
+
+        pbrFolder.open();
+
+
+        // =====================================================
+        // MOUSE CONTROL
+        // =====================================================
+
+        const mouseSettings = {
+
+            enableMouseLight: true
+
+        };
+
+
+        const mouseFolder =
+            gui.addFolder('Mouse Light Control');
+
+
+        mouseFolder
+            .add(
+                mouseSettings,
+                'enableMouseLight'
+            )
+            .name('Enable Mouse');
+
+
+        mouseFolder.open();
+
+
+        // =====================================================
+        // MOUSE POSITION
+        // =====================================================
+
+        window.addEventListener(
+            'mousemove',
+            (event) => {
+
+                if (!mouseSettings.enableMouseLight)
+                    return;
+
+
+                // Convert mouse position
+                // to range -1 to 1
+
+                const mouseX =
+                    (event.clientX /
+                        window.innerWidth) *
+                    2 - 1;
+
+
+                const mouseY =
+                    (event.clientY /
+                        window.innerHeight) *
+                    2 - 1;
+
+
+                // Move light using mouse
+
+                directionalLight.position.x =
+                    mouseX * 20;
+
+
+                directionalLight.position.y =
+                    10 - mouseY * 10;
+
+            }
+        );
+
+
+        // =====================================================
+        // WINDOW RESIZE
+        // =====================================================
+
+        window.addEventListener(
+            'resize',
+            () => {
+
+                camera.aspect =
+                    window.innerWidth /
+                    window.innerHeight;
+
+                camera.updateProjectionMatrix();
+
+
+                renderer.setSize(
+                    window.innerWidth,
+                    window.innerHeight
+                );
+
+            }
+        );
+
+
+        // =====================================================
+        // ANIMATION
+        // =====================================================
+
+        function animate() {
+
+            requestAnimationFrame(animate);
+
+            renderer.render(
+                scene,
+                camera
+            );
+
+        }
+
+
+        animate();
+
+    </script>
+
+
+    <!-- =====================================================
+         DAT.GUI STYLE
+         ===================================================== -->
+
+    <style>
+
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+
+        .dg.main.a {
+
+            float: left !important;
+
+            margin-left: 15px !important;
+
+            margin-top: 15px !important;
+
+        }
+
+
+        .dg {
+
+            font-family:
+                'Segoe UI',
+                Tahoma,
+                Geneva,
+                Verdana,
+                sans-serif !important;
+
+            text-shadow: none !important;
+
+        }
+
+
+        .dg .c .slider {
+
+            background: #2a2d34 !important;
+
+            border-radius: 4px;
+
+        }
+
+
+        .dg .c .slider-fg {
+
+            background: #149ceb !important;
+
+            border-radius: 4px;
+
+        }
+
+
+        .dg li:not(.folder) {
+
+            background: #1e2022 !important;
+
+            border-bottom:
+                1px solid #2b2e31 !important;
+
+            color: #eeeeee !important;
+
+        }
+
+
+        .dg li.title {
+
+            background: #0137b4 !important;
+
+            color: #ffffff !important;
+
+            font-weight: bold;
+
+            border-left:
+                4px solid #38bdf8 !important;
+
+        }
+
+
+        .dg .cr.number input[type=text] {
+
+            color: #ffffff !important;
+
+            background: #00000070 !important;
+
+            border-radius: 3px;
+
+        }
+
+    </style>
+
+</body>
+
+</html>
