@@ -11,15 +11,64 @@
             margin: 0;
             overflow: hidden;
             background: #02030d;
+            font-family: sans-serif;
         }
 
         canvas {
             display: block;
         }
+
+        /* ปุ่มย้อนกลับจากการซูม */
+        #backBtn {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            padding: 10px 18px;
+            font-size: 15px;
+            color: #fff;
+            background: rgba(20, 30, 60, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 8px;
+            cursor: pointer;
+            display: none;
+            backdrop-filter: blur(4px);
+        }
+
+        #backBtn:hover {
+            background: rgba(50, 70, 130, 0.85);
+        }
+
+        #debug {
+            position: fixed;
+            bottom: 40px;
+            left: 14px;
+            max-width: 90vw;
+            padding: 8px 12px;
+            color: #9fe8ff;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 6px;
+            font: 12px/1.5 monospace;
+            white-space: pre-wrap;
+            pointer-events: none;
+        }
+
+        #hint {
+            position: fixed;
+            bottom: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 13px;
+            pointer-events: none;
+        }
     </style>
 </head>
 
 <body>
+
+    <button id="backBtn">← ย้อนกลับ (Esc)</button>
+    <div id="debug">กำลังโหลดโมเดล...</div>
+    <div id="hint">คลิกที่กระดานหรือจอคอมเพื่อซูม</div>
 
     <!-- Three.js -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -29,6 +78,9 @@
 
     <!-- GLTFLoader สำหรับโหลดไฟล์ .glb / .gltf -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+    <!-- RectAreaLight (ไฟ area) ต้องใช้ตัวนี้ -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lights/RectAreaLightUniformsLib.js"></script>
 
     <script>
         // =========================================
@@ -54,10 +106,7 @@
 
         const scene = new THREE.Scene();
 
-        // ท้องฟ้าสีน้ำเงินเข้มแบบกลางคืน
         scene.background = new THREE.Color(0x02030d);
-
-        // หมอกจาง ๆ เพื่อเพิ่มบรรยากาศในระยะไกล
         scene.fog = new THREE.Fog(0x02030d, 35, 140);
 
 
@@ -118,36 +167,49 @@
 
 
         // =========================================
+        // 5.1 ไฟ Area สีขาว (RectAreaLight)
+        // =========================================
+        // ปรับค่าตรงนี้ได้ตามขนาดและตำแหน่งของโรงรถ
+
+        THREE.RectAreaLightUniformsLib.init();
+
+        const AREA_LIGHT = {
+            color: 0xffffff,   // สีขาว
+            intensity: 6,      // ความสว่าง
+            width: 10,         // ความกว้างของแผ่นไฟ
+            height: 10,        // ความยาวของแผ่นไฟ
+            position: new THREE.Vector3(0, 8, 0) // ตำแหน่ง (x, y, z) ลอยเหนือโมเดล
+        };
+
+        const areaLight = new THREE.RectAreaLight(
+            AREA_LIGHT.color,
+            AREA_LIGHT.intensity,
+            AREA_LIGHT.width,
+            AREA_LIGHT.height
+        );
+
+        areaLight.position.copy(AREA_LIGHT.position);
+        areaLight.rotation.x = -Math.PI / 2; // หันแสงลงพื้น
+        scene.add(areaLight);
+
+
+        // =========================================
         // 6. พระจันทร์
         // =========================================
 
-        const moonGeometry = new THREE.SphereGeometry(
-            5,
-            48,
-            48
-        );
+        const moonGeometry = new THREE.SphereGeometry(5, 48, 48);
 
         const moonMaterial = new THREE.MeshBasicMaterial({
             color: 0xe5eaff
         });
 
-        const moon = new THREE.Mesh(
-            moonGeometry,
-            moonMaterial
-        );
+        const moon = new THREE.Mesh(moonGeometry, moonMaterial);
 
-        // วางพระจันทร์ไว้ด้านหลังโลก
         moon.position.set(-18, 24, -38);
 
         scene.add(moon);
 
-
-        // วงแสงรอบพระจันทร์แบบโปร่งใส
-        const moonGlowGeometry = new THREE.SphereGeometry(
-            5.8,
-            32,
-            32
-        );
+        const moonGlowGeometry = new THREE.SphereGeometry(5.8, 32, 32);
 
         const moonGlowMaterial = new THREE.MeshBasicMaterial({
             color: 0x6f8edb,
@@ -156,10 +218,7 @@
             side: THREE.BackSide
         });
 
-        const moonGlow = new THREE.Mesh(
-            moonGlowGeometry,
-            moonGlowMaterial
-        );
+        const moonGlow = new THREE.Mesh(moonGlowGeometry, moonGlowMaterial);
 
         moonGlow.position.copy(moon.position);
 
@@ -185,10 +244,7 @@
 
         starGeometry.setAttribute(
             'position',
-            new THREE.Float32BufferAttribute(
-                starPositions,
-                3
-            )
+            new THREE.Float32BufferAttribute(starPositions, 3)
         );
 
         const starMaterial = new THREE.PointsMaterial({
@@ -197,10 +253,7 @@
             sizeAttenuation: true
         });
 
-        const stars = new THREE.Points(
-            starGeometry,
-            starMaterial
-        );
+        const stars = new THREE.Points(starGeometry, starMaterial);
 
         scene.add(stars);
 
@@ -228,10 +281,7 @@
         // 9. พื้นรองรับสีเข้ม
         // =========================================
 
-        const floorGeometry = new THREE.PlaneGeometry(
-            gridSize,
-            gridSize
-        );
+        const floorGeometry = new THREE.PlaneGeometry(gridSize, gridSize);
 
         const floorMaterial = new THREE.MeshStandardMaterial({
             color: 0x050711,
@@ -239,10 +289,7 @@
             metalness: 0
         });
 
-        const floor = new THREE.Mesh(
-            floorGeometry,
-            floorMaterial
-        );
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
 
         floor.rotation.x = -Math.PI / 2;
         floor.position.y = -0.02;
@@ -252,64 +299,297 @@
 
 
         // =========================================
-        // 10. โหลดโมเดล 3D (Garage1.glb)
+        // 10. โหลดโมเดล 3D
         // =========================================
 
+        // คำที่ใช้ตรวจชื่อ mesh/วัสดุ ว่าเป็น "กระดาน" หรือ "จอคอม" (ไม่สนตัวพิมพ์เล็กใหญ่)
+        // ถ้าโมเดลของคุณตั้งชื่อเป็นอย่างอื่น ให้เพิ่มคำในลิสต์นี้
+        // (ดูชื่อจริงทั้งหมดได้ใน Console ของเบราว์เซอร์ตอนโหลดโมเดลเสร็จ)
+        const ZOOM_KEYWORDS = [
+            'board', 'whiteboard', 'blackboard', 'chalkboard',
+            'screen', 'monitor', 'computer', 'display', 'laptop', 'pc', 'tv',
+            'profile', 'name', 'info', 'card', 'poster', 'sign', 'photo', 'picture', 'frame', 'panel', 'plane',
+            'กระดาน', 'จอ', 'คอม'
+        ];
+
+        // ถ้า true: mesh ที่มีรูป/texture (เช่น แผ่นป้ายโปรไฟล์ที่มีรูปถ่าย) จะซูมได้ด้วย
+        // แม้ชื่อจะไม่ตรงกับคำด้านบน (ยกเว้นชิ้นใหญ่ ๆ อย่างผนัง/พื้น)
+        const ZOOM_TEXTURED_MESHES = true;
+        let modelMaxDim = 10;
+
+        // ลิงก์: คลิกวัตถุที่ชื่อ (หรือชื่อวัสดุ) ตรงกับ keywords แล้วเปิดเว็บ
+        // ถ้าไอคอนกระเป๋าในโมเดลตั้งชื่ออื่น ให้เพิ่มชื่อนั้นใน keywords
+        const LINKS = [
+            {
+                keywords: ['briefcase', 'portfolio', 'suitcase', 'กระเป๋า', 'ผลงาน'],
+                url: 'https://github.com/6721601141nutthapong'
+            }
+        ];
+
+        // กล่องข้อความแสดงสถานะ/ชื่อวัตถุ (ตั้ง false เพื่อซ่อนเมื่อใช้งานจริง)
+        const DEBUG_HUD = false;
+        const debugEl = document.getElementById('debug');
+        if (!DEBUG_HUD) debugEl.style.display = 'none';
+        function setDebug(t) { debugEl.textContent = t; }
+
+        let loadedModel = null;
+
         const loader = new THREE.GLTFLoader();
-        const modelUrl = 'https://raw.githubusercontent.com/6721601141nutthapong/Nutthapong.github.io/main/3D/Garage1.glb';
+        const modelUrl = 'https://raw.githubusercontent.com/6721601141nutthapong/Nutthapong.github.io/main/3D/Garage1-02.glb';
 
         loader.load(
             modelUrl,
             (gltf) => {
                 const model = gltf.scene;
+                const names = [];
 
-                // เปิดให้โมเดลรับและทอดเงา
                 model.traverse((child) => {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
                     }
+                    if (child.name) names.push(child.name);
                 });
 
-                // กำหนดตำแหน่ง ขนาด และการหมุนของโมเดล
                 model.position.set(0, 0, 0);
-                model.scale.set(1, 1, 1); // สามารถปรับขนาดได้ที่นี่ เช่น (0.5, 0.5, 0.5)
+                model.scale.set(1, 1, 1);
 
                 scene.add(model);
-                console.log('โหลดโมเดล Garage1.glb สำเร็จ!');
+                loadedModel = model;
+
+                const mSize = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+                modelMaxDim = Math.max(mSize.x, mSize.y, mSize.z, 1);
+
+                setDebug('โหลดโมเดลสำเร็จ — ชี้/คลิกวัตถุเพื่อดูชื่อ');
+                console.log('โหลดโมเดลสำเร็จ!');
+                console.log('ชื่อ object ทั้งหมดในโมเดล:', names);
             },
             (xhr) => {
-                // แสดงความคืบหน้าการโหลด
-                console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+                if (xhr.total) setDebug('กำลังโหลดโมเดล... ' + Math.round(xhr.loaded / xhr.total * 100) + '%');
             },
             (error) => {
-                // แสดงข้อผิดพลาดหากโหลดไม่สำเร็จ
+                setDebug('โหลดโมเดลไม่สำเร็จ: ' + (error && error.message ? error.message : error) + '\n(ตรวจอินเทอร์เน็ต/ลิงก์ไฟล์ .glb แล้วรีเฟรช)');
                 console.error('เกิดข้อผิดพลาดในการโหลดโมเดล:', error);
             }
         );
 
 
         // =========================================
-        // 11. Resize
+        // 11. คลิกเพื่อซูมกระดาน / จอคอม
+        // =========================================
+
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        const backBtn = document.getElementById('backBtn');
+
+        function findLink(object) {
+            let node = object;
+            while (node && node !== scene) {
+                const nodeName = (node.name || '').toLowerCase();
+                const matName = (node.material && !Array.isArray(node.material) && node.material.name || '').toLowerCase();
+                for (const link of LINKS) {
+                    if (link.keywords.some(k => nodeName.includes(k.toLowerCase()) || matName.includes(k.toLowerCase()))) {
+                        return link;
+                    }
+                }
+                node = node.parent;
+            }
+            return null;
+        }
+
+        function hasTexture(node) {
+            if (!node.isMesh) return false;
+            const mats = Array.isArray(node.material) ? node.material : [node.material];
+            return mats.some(m => m && m.map);
+        }
+
+        // หา node ที่ชื่อตรงกับ keyword (หรือเป็นแผ่นที่มีรูป) โดยไล่จาก mesh ขึ้นไปหา parent
+        function findZoomTarget(object) {
+            let node = object;
+            while (node && node !== scene) {
+                const nodeName = (node.name || '').toLowerCase();
+                const matName = (node.material && !Array.isArray(node.material) && node.material.name || '').toLowerCase();
+                if (ZOOM_KEYWORDS.some(k => nodeName.includes(k) || matName.includes(k))) {
+                    return node;
+                }
+                node = node.parent;
+            }
+
+            // สำรอง: mesh ที่มี texture และไม่ใหญ่เกินไป
+            if (ZOOM_TEXTURED_MESHES && hasTexture(object)) {
+                const s = new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3());
+                if (Math.max(s.x, s.y, s.z) < modelMaxDim * 0.4) return object;
+            }
+            return null;
+        }
+
+        function getHits(event) {
+            if (!loadedModel) return [];
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(pointer, camera);
+            return raycaster.intersectObject(loadedModel, true);
+        }
+
+        function describe(obj) {
+            const mat = Array.isArray(obj.material) ? obj.material[0] : obj.material;
+            return '"' + (obj.name || '(ไม่มีชื่อ)') + '"' +
+                (obj.parent && obj.parent.name ? ' ← ' + obj.parent.name : '') +
+                (mat && mat.name ? '  [วัสดุ: ' + mat.name + ']' : '');
+        }
+
+        function pick(event) {
+            const hits = getHits(event);
+            if (hits.length === 0) return null;
+
+            // ลิงก์: ตรวจ 3 ชิ้นแรกที่รังสีชน (เผื่อมีกรอบ/แผ่นใสบังอยู่หน้าไอคอน)
+            for (const h of hits.slice(0, 3)) {
+                const link = findLink(h.object);
+                if (link) return { link };
+            }
+
+            const target = findZoomTarget(hits[0].object);
+            return target ? { target, hit: hits[0] } : null;
+        }
+
+        // ---- อนิเมชันกล้อง ----
+        let camAnim = null;
+        let homeView = null; // เก็บมุมมองเดิมไว้ย้อนกลับ
+        const ANIM_DURATION = 0.9; // วินาที
+
+        function flyTo(toPos, toTarget) {
+            camAnim = {
+                fromPos: camera.position.clone(),
+                toPos: toPos.clone(),
+                fromTarget: controls.target.clone(),
+                toTarget: toTarget.clone(),
+                t: 0
+            };
+            controls.enabled = false;
+        }
+
+        function zoomToObject(obj, hit) {
+            if (!homeView) {
+                homeView = {
+                    pos: camera.position.clone(),
+                    target: controls.target.clone()
+                };
+            }
+
+            const box = new THREE.Box3().setFromObject(obj);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z, 0.3);
+
+            // ระยะกล้องให้พอดีกับขนาดวัตถุ
+            const fov = THREE.MathUtils.degToRad(camera.fov);
+            const dist = Math.max((maxDim / 2) / Math.tan(fov / 2) * 1.5, 0.8);
+
+            // มองตรงหน้าแผ่น (ตามทิศ normal ของพื้นผิวที่คลิก) เพื่อให้เห็นเต็มไม่เอียง
+            const toCam = camera.position.clone().sub(center);
+            let dir;
+            if (hit && hit.face) {
+                dir = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+                if (dir.dot(toCam) < 0) dir.negate();
+            } else {
+                dir = toCam;
+                dir.y *= 0.3;
+                dir.normalize();
+            }
+
+            const toPos = center.clone().add(dir.multiplyScalar(dist));
+            flyTo(toPos, center);
+            backBtn.style.display = 'block';
+        }
+
+        function zoomBack() {
+            if (!homeView) return;
+            flyTo(homeView.pos, homeView.target);
+            homeView = null;
+            backBtn.style.display = 'none';
+        }
+
+        backBtn.addEventListener('click', zoomBack);
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') zoomBack();
+        });
+
+        // แยก "คลิก" ออกจาก "ลากหมุนกล้อง"
+        let downX = 0, downY = 0;
+
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            downX = e.clientX;
+            downY = e.clientY;
+        });
+
+        renderer.domElement.addEventListener('pointerup', (e) => {
+            const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+            if (moved > 5) return; // เป็นการลาก ไม่ใช่คลิก
+
+            const hits = getHits(e);
+            if (DEBUG_HUD) {
+                setDebug(hits.length
+                    ? 'คลิกโดน (เรียงจากใกล้สุด):\n' + hits.slice(0, 4).map((h, i) => (i + 1) + '. ' + describe(h.object)).join('\n')
+                    : 'คลิกโดน: ไม่มีวัตถุ');
+            }
+            console.log('คลิกโดน:', hits.slice(0, 4).map(h => h.object.name || '(ไม่มีชื่อ)'));
+
+            const res = pick(e);
+            if (!res) return;
+            if (res.link) {
+                window.open(res.link.url, '_blank', 'noopener');
+            } else {
+                zoomToObject(res.target, res.hit);
+            }
+        });
+
+        // เปลี่ยนเคอร์เซอร์เป็นมือเมื่อเมาส์อยู่บนกระดาน/จอ
+        renderer.domElement.addEventListener('pointermove', (e) => {
+            if (e.buttons !== 0) return;
+            renderer.domElement.style.cursor = pick(e) ? 'pointer' : 'default';
+        });
+
+
+        // =========================================
+        // 12. Resize
         // =========================================
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
 
-            renderer.setSize(
-                window.innerWidth,
-                window.innerHeight
-            );
+            renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
 
         // =========================================
-        // 12. Animation Loop
+        // 13. Animation Loop
         // =========================================
+
+        const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
+
+            const dt = clock.getDelta();
+
+            if (camAnim) {
+                camAnim.t = Math.min(camAnim.t + dt / ANIM_DURATION, 1);
+                // easeInOutCubic
+                const t = camAnim.t;
+                const k = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+                camera.position.lerpVectors(camAnim.fromPos, camAnim.toPos, k);
+                controls.target.lerpVectors(camAnim.fromTarget, camAnim.toTarget, k);
+
+                if (camAnim.t >= 1) {
+                    camAnim = null;
+                    controls.enabled = true;
+                }
+            }
 
             controls.update();
 
