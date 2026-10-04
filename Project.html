@@ -169,7 +169,6 @@
         // =========================================
         // 5.1 ไฟ Area สีขาว (RectAreaLight)
         // =========================================
-        // ปรับค่าตรงนี้ได้ตามขนาดและตำแหน่งของโรงรถ
 
         THREE.RectAreaLightUniformsLib.init();
 
@@ -302,9 +301,6 @@
         // 10. โหลดโมเดล 3D
         // =========================================
 
-        // คำที่ใช้ตรวจชื่อ mesh/วัสดุ ว่าเป็น "กระดาน" หรือ "จอคอม" (ไม่สนตัวพิมพ์เล็กใหญ่)
-        // ถ้าโมเดลของคุณตั้งชื่อเป็นอย่างอื่น ให้เพิ่มคำในลิสต์นี้
-        // (ดูชื่อจริงทั้งหมดได้ใน Console ของเบราว์เซอร์ตอนโหลดโมเดลเสร็จ)
         const ZOOM_KEYWORDS = [
             'board', 'whiteboard', 'blackboard', 'chalkboard',
             'screen', 'monitor', 'computer', 'display', 'laptop', 'pc', 'tv',
@@ -312,21 +308,16 @@
             'กระดาน', 'จอ', 'คอม'
         ];
 
-        // ถ้า true: mesh ที่มีรูป/texture (เช่น แผ่นป้ายโปรไฟล์ที่มีรูปถ่าย) จะซูมได้ด้วย
-        // แม้ชื่อจะไม่ตรงกับคำด้านบน (ยกเว้นชิ้นใหญ่ ๆ อย่างผนัง/พื้น)
         const ZOOM_TEXTURED_MESHES = true;
         let modelMaxDim = 10;
 
-        // ลิงก์: คลิกวัตถุที่ชื่อ (หรือชื่อวัสดุ) ตรงกับ keywords แล้วเปิดเว็บ
-        // ถ้าไอคอนกระเป๋าในโมเดลตั้งชื่ออื่น ให้เพิ่มชื่อนั้นใน keywords
         const LINKS = [
             {
-                keywords: ['briefcase', 'portfolio', 'suitcase', 'กระเป๋า', 'ผลงาน'],
-                url: 'https://github.com/6721601141nutthapong'
+                keywords: ['briefcase', 'portfolio', 'suitcase', 'กระเป๋า', 'ผลงาน', 'plane002'],
+                url: 'https://6721601141nutthapong.github.io/Nutthapong.github.io/'
             }
         ];
 
-        // กล่องข้อความแสดงสถานะ/ชื่อวัตถุ (ตั้ง false เพื่อซ่อนเมื่อใช้งานจริง)
         const DEBUG_HUD = false;
         const debugEl = document.getElementById('debug');
         if (!DEBUG_HUD) debugEl.style.display = 'none';
@@ -335,7 +326,7 @@
         let loadedModel = null;
 
         const loader = new THREE.GLTFLoader();
-        const modelUrl = 'https://raw.githubusercontent.com/6721601141nutthapong/Nutthapong.github.io/main/3D/Garage1-02.glb';
+        const modelUrl = 'https://raw.githubusercontent.com/6721601141nutthapong/Nutthapong.github.io/main/3D/Garage02.glb';
 
         loader.load(
             modelUrl,
@@ -361,15 +352,12 @@
                 modelMaxDim = Math.max(mSize.x, mSize.y, mSize.z, 1);
 
                 setDebug('โหลดโมเดลสำเร็จ — ชี้/คลิกวัตถุเพื่อดูชื่อ');
-                console.log('โหลดโมเดลสำเร็จ!');
-                console.log('ชื่อ object ทั้งหมดในโมเดล:', names);
             },
             (xhr) => {
                 if (xhr.total) setDebug('กำลังโหลดโมเดล... ' + Math.round(xhr.loaded / xhr.total * 100) + '%');
             },
             (error) => {
-                setDebug('โหลดโมเดลไม่สำเร็จ: ' + (error && error.message ? error.message : error) + '\n(ตรวจอินเทอร์เน็ต/ลิงก์ไฟล์ .glb แล้วรีเฟรช)');
-                console.error('เกิดข้อผิดพลาดในการโหลดโมเดล:', error);
+                setDebug('โหลดโมเดลไม่สำเร็จ: ' + (error && error.message ? error.message : error));
             }
         );
 
@@ -403,7 +391,6 @@
             return mats.some(m => m && m.map);
         }
 
-        // หา node ที่ชื่อตรงกับ keyword (หรือเป็นแผ่นที่มีรูป) โดยไล่จาก mesh ขึ้นไปหา parent
         function findZoomTarget(object) {
             let node = object;
             while (node && node !== scene) {
@@ -415,7 +402,6 @@
                 node = node.parent;
             }
 
-            // สำรอง: mesh ที่มี texture และไม่ใหญ่เกินไป
             if (ZOOM_TEXTURED_MESHES && hasTexture(object)) {
                 const s = new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3());
                 if (Math.max(s.x, s.y, s.z) < modelMaxDim * 0.4) return object;
@@ -434,18 +420,10 @@
             return raycaster.intersectObject(loadedModel, true);
         }
 
-        function describe(obj) {
-            const mat = Array.isArray(obj.material) ? obj.material[0] : obj.material;
-            return '"' + (obj.name || '(ไม่มีชื่อ)') + '"' +
-                (obj.parent && obj.parent.name ? ' ← ' + obj.parent.name : '') +
-                (mat && mat.name ? '  [วัสดุ: ' + mat.name + ']' : '');
-        }
-
         function pick(event) {
             const hits = getHits(event);
             if (hits.length === 0) return null;
 
-            // ลิงก์: ตรวจ 3 ชิ้นแรกที่รังสีชน (เผื่อมีกรอบ/แผ่นใสบังอยู่หน้าไอคอน)
             for (const h of hits.slice(0, 3)) {
                 const link = findLink(h.object);
                 if (link) return { link };
@@ -457,8 +435,8 @@
 
         // ---- อนิเมชันกล้อง ----
         let camAnim = null;
-        let homeView = null; // เก็บมุมมองเดิมไว้ย้อนกลับ
-        const ANIM_DURATION = 0.9; // วินาที
+        let homeView = null; 
+        const ANIM_DURATION = 0.9; 
 
         function flyTo(toPos, toTarget) {
             camAnim = {
@@ -484,11 +462,20 @@
             const size = box.getSize(new THREE.Vector3());
             const maxDim = Math.max(size.x, size.y, size.z, 0.3);
 
-            // ระยะกล้องให้พอดีกับขนาดวัตถุ
             const fov = THREE.MathUtils.degToRad(camera.fov);
-            const dist = Math.max((maxDim / 2) / Math.tan(fov / 2) * 1.5, 0.8);
+            
+            // --- เงื่อนไขปรับระยะซูมให้ทะลุเก้าอี้ ---
+            let zoomFactor = 1.5; // ระยะปกติของกระดาน/รูปภาพ
+            const objName = (obj.name || '').toLowerCase();
+            const matName = (obj.material && !Array.isArray(obj.material) && obj.material.name || '').toLowerCase();
+            
+            // เช็คว่าเป็นจอคอมหรือไม่
+            if (['screen', 'monitor', 'computer', 'display', 'pc', 'จอ', 'คอม'].some(k => objName.includes(k) || matName.includes(k))) {
+                zoomFactor = 0.8; // ปรับตัวเลขให้น้อยลงเพื่อให้ซูมลึกขึ้น ทะลุเก้าอี้ (เปลี่ยนจาก 0.8 เป็น 0.6 ได้ถ้ายังใกล้ไม่พอ)
+            }
 
-            // มองตรงหน้าแผ่น (ตามทิศ normal ของพื้นผิวที่คลิก) เพื่อให้เห็นเต็มไม่เอียง
+            const dist = Math.max((maxDim / 2) / Math.tan(fov / 2) * zoomFactor, 0.4);
+
             const toCam = camera.position.clone().sub(center);
             let dir;
             if (hit && hit.face) {
@@ -517,7 +504,6 @@
             if (e.key === 'Escape') zoomBack();
         });
 
-        // แยก "คลิก" ออกจาก "ลากหมุนกล้อง"
         let downX = 0, downY = 0;
 
         renderer.domElement.addEventListener('pointerdown', (e) => {
@@ -527,15 +513,7 @@
 
         renderer.domElement.addEventListener('pointerup', (e) => {
             const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
-            if (moved > 5) return; // เป็นการลาก ไม่ใช่คลิก
-
-            const hits = getHits(e);
-            if (DEBUG_HUD) {
-                setDebug(hits.length
-                    ? 'คลิกโดน (เรียงจากใกล้สุด):\n' + hits.slice(0, 4).map((h, i) => (i + 1) + '. ' + describe(h.object)).join('\n')
-                    : 'คลิกโดน: ไม่มีวัตถุ');
-            }
-            console.log('คลิกโดน:', hits.slice(0, 4).map(h => h.object.name || '(ไม่มีชื่อ)'));
+            if (moved > 5) return; 
 
             const res = pick(e);
             if (!res) return;
@@ -546,7 +524,6 @@
             }
         });
 
-        // เปลี่ยนเคอร์เซอร์เป็นมือเมื่อเมาส์อยู่บนกระดาน/จอ
         renderer.domElement.addEventListener('pointermove', (e) => {
             if (e.buttons !== 0) return;
             renderer.domElement.style.cursor = pick(e) ? 'pointer' : 'default';
@@ -578,7 +555,6 @@
 
             if (camAnim) {
                 camAnim.t = Math.min(camAnim.t + dt / ANIM_DURATION, 1);
-                // easeInOutCubic
                 const t = camAnim.t;
                 const k = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
